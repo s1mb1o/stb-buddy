@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>stb-buddy Wi-Fi setup</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="setup-body">
+  <main class="setup-card">
+    <h1>stb-buddy Wi-Fi setup</h1>
+    <p>Choose the Wi-Fi network that this buddy should join.</p>
+    <div class="setup-meta">
+      <span>Setup AP: <strong id="ap-name">Buddy-…</strong></span>
+      <span>Address: <strong>192.168.4.1</strong></span>
+    </div>
+    <form id="wifi-form">
+      <div class="field">
+        <label for="ssid">Wi-Fi SSID</label>
+        <input id="ssid" name="ssid" maxlength="32" autocomplete="off" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Wi-Fi password</label>
+        <input id="password" name="password" type="password" maxlength="63" autocomplete="new-password">
+        <p class="hint">Leave empty for an open network; otherwise use 8–63 characters.</p>
+      </div>
+      <div id="status" class="setup-status" role="status" aria-live="polite"></div>
+      <div class="actions">
+        <button id="save" type="submit">Save and connect</button>
+      </div>
+    </form>
+  </main>
+  <script src="/static/setup.js"></script>
+</body>
+</html>

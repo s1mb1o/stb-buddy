@@ -1,0 +1,17 @@
+menu "STB Buddy"
+
+config STB_BUDDY_LOG_BYTES
+    int "PSRAM UART history size in bytes"
+    range 65536 6291456
+    default 4194304
+
+config STB_BUDDY_UART_BAUD
+    int "Default STB UART baud rate"
+    range 1200 3000000
+    default 115200
+
+config STB_BUDDY_SETUP_AP_PREFIX
+    string "Setup access-point prefix"
+    default "Buddy"
+
+endmenu

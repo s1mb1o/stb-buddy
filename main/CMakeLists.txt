@@ -1,0 +1,51 @@
+idf_component_register(
+    SRCS
+        "app_main.cpp"
+        "display_service.cpp"
+        "file_download.cpp"
+        "http_service.cpp"
+        "ir_blaster.cpp"
+        "ir_waveform.cpp"
+        "lircd.cpp"
+        "mcp_service.cpp"
+        "remote_store.cpp"
+        "ring_log.cpp"
+        "uart_console.cpp"
+        "wifi_service.cpp"
+    INCLUDE_DIRS "."
+    REQUIRES
+        esp_driver_gpio
+        esp_driver_rmt
+        esp_driver_uart
+        esp_event
+        esp_http_server
+        esp_netif
+        esp_psram
+        esp_system
+        esp_timer
+        esp_wifi
+        app_update
+        json
+        lwip
+        mbedtls
+        nvs_flash
+    EMBED_TXTFILES
+        "web/index.html"
+        "web/app.css"
+        "web/app.js"
+        "web/help.html"
+        "web/help.js"
+        "web/openapi.json"
+        "web/setup.html"
+        "web/setup.js"
+        "web/vendor/xterm.css"
+        "web/vendor/xterm.js"
+        "web/vendor/addon-fit.js"
+)
+
+target_compile_options(${COMPONENT_LIB} PRIVATE
+    -Wall
+    -Wextra
+    -Wconversion
+    -Wshadow
+)

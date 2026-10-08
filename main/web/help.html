@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>stb-buddy API documentation</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="api-doc-body">
+  <header class="api-doc-header">
+    <div>
+      <a href="/">← Console</a>
+      <h1>stb-buddy API</h1>
+      <p>Embedded OpenAPI reference · firmware <strong id="runtime-version">…</strong></p>
+    </div>
+    <a class="button" href="/openapi.json" download="stb-buddy-openapi.json">Download OpenAPI JSON</a>
+  </header>
+  <main class="api-doc">
+    <section class="api-intro">
+      <h2>REST and MCP on this device</h2>
+      <p>The REST API controls physical UART and IR hardware, stores Wi-Fi and remote settings, and can replace the running firmware. It has no authentication. Use it only while the device and network are trusted.</p>
+      <p>This page is read-only: it describes operations but never invokes them. MCP uses Streamable HTTP JSON-RPC at <code>/mcp</code>; detailed MCP tool schemas are returned by <code>tools/list</code>.</p>
+    </section>
+    <p id="api-doc-status" class="api-doc-status" role="status">Loading <code>/openapi.json</code>…</p>
+    <div id="api-groups"></div>
+  </main>
+  <script src="/static/help.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+*.elf
+*.map
+__pycache__/
+*.py[cod]
+.DS_Store
+.idea/
+.vscode/

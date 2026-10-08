@@ -1,0 +1,752 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "stb-buddy REST API",
+    "version": "0.12.3",
+    "description": "HTTP API for the standalone AtomS3R UART, file-transfer, remote-control and OTA appliance. The API is unauthenticated and must be used only on a trusted network. MCP uses Streamable HTTP JSON-RPC at /mcp and is represented here only as a generic transport operation."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "The stb-buddy device serving this document"
+    }
+  ],
+  "security": [],
+  "tags": [
+    { "name": "Documentation", "description": "Embedded API documentation" },
+    { "name": "Status", "description": "Device and service status" },
+    { "name": "UART", "description": "Raw UART I/O, retained history and runtime format" },
+    { "name": "Files", "description": "Verified files copied from the connected STB" },
+    { "name": "Wi-Fi", "description": "Network status and setup-mode provisioning" },
+    { "name": "Remotes", "description": "Persistent LIRC remote definitions" },
+    { "name": "IR", "description": "Named-key transmission and browser event annotations" },
+    { "name": "OTA", "description": "Application-only firmware updates" },
+    { "name": "MCP", "description": "Streamable HTTP MCP transport" }
+  ],
+  "paths": {
+    "/docs": {
+      "get": {
+        "tags": ["Documentation"],
+        "operationId": "getApiDocs",
+        "summary": "Open the human-readable API reference",
+        "responses": {
+          "200": {
+            "description": "Dependency-free HTML documentation",
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": ["Documentation"],
+        "operationId": "getOpenApi",
+        "summary": "Download the OpenAPI 3.1 schema",
+        "responses": {
+          "200": {
+            "description": "This OpenAPI document",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": ["Status"],
+        "operationId": "getHealth",
+        "summary": "Get live device status",
+        "description": "Returns firmware, Wi-Fi, UART, retained-history and IR status. Wi-Fi credentials are never returned.",
+        "responses": {
+          "200": {
+            "description": "Current device status",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/read": {
+      "get": {
+        "tags": ["UART"],
+        "operationId": "readUartHistory",
+        "summary": "Read retained raw UART bytes",
+        "description": "Reads without consuming data. An omitted since value returns a bounded tail. Old offsets are clamped to the oldest retained byte.",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Absolute monotonic byte offset",
+            "schema": { "type": "integer", "minimum": 0 }
+          },
+          {
+            "name": "max_bytes",
+            "in": "query",
+            "required": false,
+            "description": "Maximum bytes to return; defaults to 32768",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 262144, "default": 32768 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Raw UART bytes with absolute range headers",
+            "headers": {
+              "X-Log-Start": { "description": "Offset of the first returned byte", "schema": { "type": "integer", "minimum": 0 } },
+              "X-Log-Next": { "description": "Offset to use for the next read", "schema": { "type": "integer", "minimum": 0 } },
+              "X-Log-Oldest": { "description": "Oldest offset still retained", "schema": { "type": "integer", "minimum": 0 } },
+              "X-Log-End": { "description": "Offset immediately after the newest byte", "schema": { "type": "integer", "minimum": 0 } }
+            },
+            "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/uart/write": {
+      "post": {
+        "tags": ["UART"],
+        "operationId": "writeUart",
+        "summary": "Write raw bytes to the STB UART",
+        "description": "The request is serialized with all other UART writers. Bytes are transmitted exactly as supplied. A successful public API write creates a separate browser annotation and does not alter raw UART history.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": { "type": "string", "format": "binary", "minLength": 1, "maxLength": 4096 }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "All bytes were written",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UartWriteResult" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "413": { "$ref": "#/components/responses/TooLarge" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/uart/events": {
+      "get": {
+        "tags": ["UART"],
+        "operationId": "getUartAnnotations",
+        "summary": "Read MCP and HTTP UART-write annotations",
+        "description": "Returns display-only annotations after the supplied sequence from a bounded 32-record RAM ring. Annotations never enter raw UART history.",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 0, "default": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "UART annotation batch",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UartNoteBatch" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/uart/configure": {
+      "post": {
+        "tags": ["UART"],
+        "operationId": "configureUart",
+        "summary": "Change the live UART format",
+        "description": "Applies the complete format atomically. The setting is not persisted and reboot restores the compiled default.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UartConfiguration" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Applied configuration",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UartStatus" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "413": { "$ref": "#/components/responses/TooLarge" },
+          "422": { "$ref": "#/components/responses/Unprocessable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/clear_history": {
+      "post": {
+        "tags": ["UART"],
+        "operationId": "clearUartHistory",
+        "summary": "Permanently clear retained UART history",
+        "description": "Discarded bytes cannot be recovered through the browser, REST or MCP. Monotonic offsets are not reused. The UART-write annotation ring is also cleared.",
+        "responses": {
+          "200": {
+            "description": "History was cleared",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ClearHistoryResult" } } }
+          }
+        }
+      }
+    },
+    "/api/log": {
+      "get": {
+        "tags": ["UART"],
+        "operationId": "downloadUartLog",
+        "summary": "Download retained UART history",
+        "description": "Streams the raw retained bytes as stb-buddy-uart.log. Browser-only IR and UART-write annotations are excluded.",
+        "responses": {
+          "200": {
+            "description": "Raw retained UART log",
+            "headers": {
+              "Content-Disposition": { "schema": { "type": "string", "example": "attachment; filename=\"stb-buddy-uart.log\"" } }
+            },
+            "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/download": {
+      "post": {
+        "tags": ["Files"],
+        "operationId": "startStbFileDownload",
+        "summary": "Start a verified file copy from the STB",
+        "description": "Requires the connected UART to be at a Linux shell prompt. Only one job runs at a time; at most 2 MiB is retained in PSRAM.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DownloadRequest" } } }
+        },
+        "responses": {
+          "202": {
+            "description": "Job started",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DownloadStart" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/TooLarge" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "get": {
+        "tags": ["Files"],
+        "operationId": "getStbFileDownload",
+        "summary": "Get current file-copy job status",
+        "responses": {
+          "200": {
+            "description": "Current or most recently completed job",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DownloadStatus" } } }
+          }
+        }
+      }
+    },
+    "/api/downloads/{name}": {
+      "get": {
+        "tags": ["Files"],
+        "operationId": "downloadCopiedFile",
+        "summary": "Download a verified file cached in PSRAM",
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string", "maxLength": 80 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verified file bytes",
+            "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/wifi": {
+      "get": {
+        "tags": ["Wi-Fi"],
+        "operationId": "getWifi",
+        "summary": "Get Wi-Fi state without credentials",
+        "responses": {
+          "200": {
+            "description": "Current network state",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WifiStatus" } } }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Wi-Fi"],
+        "operationId": "saveWifi",
+        "summary": "Save station credentials and restart",
+        "description": "Accepted only in setup-AP mode. The password is written to NVS but never returned or logged.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WifiCredentials" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Credentials saved and restart scheduled",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RestartResult" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/TooLarge" },
+          "422": { "$ref": "#/components/responses/Unprocessable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/remotes": {
+      "get": {
+        "tags": ["Remotes"],
+        "operationId": "listRemotes",
+        "summary": "List loaded remotes and named keys",
+        "responses": {
+          "200": {
+            "description": "Parsed remote database",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RemoteList" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "put": {
+        "tags": ["Remotes"],
+        "operationId": "uploadRemotes",
+        "summary": "Validate and persist lircd.conf",
+        "description": "Accepts 1 through 8192 raw bytes. Parsing and NVS commit complete before the active database is replaced.",
+        "requestBody": {
+          "required": true,
+          "content": { "text/plain": { "schema": { "type": "string", "minLength": 1, "maxLength": 8192 } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuration loaded",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RemoteLoadResult" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "413": { "$ref": "#/components/responses/TooLarge" },
+          "422": {
+            "description": "LIRC parse error; the previous configuration remains active",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ParseError" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/remotes/config": {
+      "get": {
+        "tags": ["Remotes"],
+        "operationId": "downloadRemotes",
+        "summary": "Download the exact persisted lircd.conf",
+        "responses": {
+          "200": {
+            "description": "Raw persisted remote configuration",
+            "headers": {
+              "Content-Disposition": { "schema": { "type": "string", "example": "attachment; filename=\"lircd.conf\"" } }
+            },
+            "content": { "text/plain": { "schema": { "type": "string", "maxLength": 8192 } } }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/ir/send": {
+      "post": {
+        "tags": ["IR"],
+        "operationId": "sendIrKey",
+        "summary": "Transmit one named remote key",
+        "description": "Produces a physical IR signal through GPIO47. Remote may be its stable numeric index or name.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IrSendRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Transmission completed",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IrSendResult" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "413": { "$ref": "#/components/responses/TooLarge" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/ir/events": {
+      "get": {
+        "tags": ["IR"],
+        "operationId": "getIrEvents",
+        "summary": "Read successful IR transmission events",
+        "description": "Returns events after the supplied sequence from a bounded 32-record RAM ring.",
+        "parameters": [
+          { "name": "since", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "IR event batch",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IrEventBatch" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/ota": {
+      "get": {
+        "tags": ["OTA"],
+        "operationId": "getOtaStatus",
+        "summary": "Get running and selected firmware status",
+        "responses": {
+          "200": {
+            "description": "OTA partition status",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OtaStatus" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "post": {
+        "tags": ["OTA"],
+        "operationId": "uploadOta",
+        "summary": "Validate an application image and select it for next boot",
+        "description": "Accepts only an ESP-IDF application image fitting the inactive 3 MiB slot. The image is integrity-checked but is not cryptographically authenticated. Upload does not restart the device.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary", "minLength": 1, "maxLength": 3145728 } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Validated image selected for next boot",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OtaInstallResult" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "413": { "$ref": "#/components/responses/TooLarge" },
+          "422": { "$ref": "#/components/responses/Unprocessable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/ota/reboot": {
+      "post": {
+        "tags": ["OTA"],
+        "operationId": "rebootForOta",
+        "summary": "Restart into the selected boot partition",
+        "description": "Schedules a controller restart one second after the response.",
+        "responses": {
+          "200": {
+            "description": "Restart scheduled",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RestartResult" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "tags": ["MCP"],
+        "operationId": "postMcp",
+        "summary": "Send a Streamable HTTP MCP JSON-RPC message",
+        "description": "Supports MCP discovery/initialization, ping, tools/list and tools/call. Consult the embedded product specification for tool schemas; this operation models only the generic transport envelope.",
+        "parameters": [
+          { "name": "MCP-Protocol-Version", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON-RPC response",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } }
+          },
+          "202": { "description": "Notification accepted without a response body" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "413": { "$ref": "#/components/responses/TooLarge" }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "BadRequest": {
+        "description": "Malformed or incomplete request",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "NotFound": {
+        "description": "Requested resource was not found",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Conflict": {
+        "description": "Operation conflicts with current device state",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "TooLarge": {
+        "description": "Request body exceeds its bounded limit",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Unprocessable": {
+        "description": "Well-formed input failed semantic validation",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "InternalError": {
+        "description": "Device could not complete the operation",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      },
+      "WifiStatus": {
+        "type": "object",
+        "required": ["mode", "connected", "ssid", "ip"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["station", "setup-ap"] },
+          "connected": { "type": "boolean" },
+          "ssid": { "type": "string", "maxLength": 32 },
+          "ip": { "type": "string", "description": "IPv4 address or an empty string while unavailable" }
+        }
+      },
+      "WifiCredentials": {
+        "type": "object",
+        "required": ["ssid", "password"],
+        "properties": {
+          "ssid": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "password": { "type": "string", "writeOnly": true, "description": "Empty for an open network, otherwise 8 through 63 bytes", "maxLength": 63 }
+        }
+      },
+      "UartConfiguration": {
+        "type": "object",
+        "required": ["baud", "data_bits", "parity", "stop_bits"],
+        "properties": {
+          "baud": { "type": "integer", "minimum": 1200, "maximum": 3000000 },
+          "data_bits": { "type": "integer", "minimum": 5, "maximum": 8 },
+          "parity": { "type": "string", "enum": ["none", "even", "odd"] },
+          "stop_bits": { "type": "number", "enum": [1, 1.5, 2] }
+        }
+      },
+      "UartStatus": {
+        "allOf": [
+          { "$ref": "#/components/schemas/UartConfiguration" },
+          {
+            "type": "object",
+            "required": ["port"],
+            "properties": {
+              "port": { "type": "integer", "const": 1 },
+              "connected": { "type": "boolean" },
+              "rx_gpio": { "type": "integer", "const": 1 },
+              "tx_gpio": { "type": "integer", "const": 2 }
+            }
+          }
+        ]
+      },
+      "HistoryStatus": {
+        "type": "object",
+        "required": ["start", "end", "bytes", "capacity"],
+        "properties": {
+          "start": { "type": "integer", "minimum": 0 },
+          "end": { "type": "integer", "minimum": 0 },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "capacity": { "type": "integer", "const": 4194304 }
+        }
+      },
+      "IrStatus": {
+        "type": "object",
+        "required": ["ready", "gpio", "remotes", "keys"],
+        "properties": {
+          "ready": { "type": "boolean" },
+          "gpio": { "type": "integer", "const": 47 },
+          "remotes": { "type": "integer", "minimum": 0, "maximum": 8 },
+          "keys": { "type": "integer", "minimum": 0, "maximum": 256 }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": ["name", "version", "wifi", "uart", "history", "ir"],
+        "properties": {
+          "name": { "type": "string", "const": "stb-buddy" },
+          "version": { "type": "string" },
+          "wifi": { "$ref": "#/components/schemas/WifiStatus" },
+          "uart": { "$ref": "#/components/schemas/UartStatus" },
+          "history": { "$ref": "#/components/schemas/HistoryStatus" },
+          "ir": { "$ref": "#/components/schemas/IrStatus" }
+        }
+      },
+      "UartWriteResult": {
+        "type": "object",
+        "required": ["written"],
+        "properties": { "written": { "type": "integer", "minimum": 1, "maximum": 4096 } }
+      },
+      "ClearHistoryResult": {
+        "type": "object",
+        "required": ["cleared_bytes", "cleared_notes", "next"],
+        "properties": {
+          "cleared_bytes": { "type": "integer", "minimum": 0, "maximum": 4194304 },
+          "cleared_notes": { "type": "integer", "minimum": 0, "maximum": 32 },
+          "next": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "UartNote": {
+        "type": "object",
+        "required": ["sequence", "uptime_ms", "source", "message"],
+        "properties": {
+          "sequence": { "type": "integer", "minimum": 1 },
+          "uptime_ms": { "type": "integer", "minimum": 0 },
+          "source": { "type": "string", "enum": ["HTTP", "MCP", "MCP reply"] },
+          "message": { "type": "string", "maxLength": 255 }
+        }
+      },
+      "UartNoteBatch": {
+        "type": "object",
+        "required": ["events", "oldest", "next"],
+        "properties": {
+          "events": { "type": "array", "maxItems": 32, "items": { "$ref": "#/components/schemas/UartNote" } },
+          "oldest": { "type": "integer", "minimum": 0 },
+          "next": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "DownloadRequest": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "timeout": { "type": "integer", "minimum": 1, "maximum": 600, "default": 600 }
+        }
+      },
+      "DownloadStart": {
+        "type": "object",
+        "required": ["started", "generation"],
+        "properties": {
+          "started": { "type": "boolean", "const": true },
+          "generation": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "DownloadStatus": {
+        "type": "object",
+        "required": ["state", "generation", "path", "name", "size", "received", "seconds", "retries", "transport", "board_ips", "sha256_source", "sha256_local", "file", "download_url", "error"],
+        "properties": {
+          "state": { "type": "string", "enum": ["idle", "running", "complete", "failed"] },
+          "generation": { "type": "integer", "minimum": 0 },
+          "path": { "type": "string" },
+          "name": { "type": "string", "maxLength": 80 },
+          "size": { "type": "integer", "minimum": 0, "maximum": 2097152 },
+          "received": { "type": "integer", "minimum": 0, "maximum": 2097152 },
+          "seconds": { "type": "number", "minimum": 0 },
+          "retries": { "type": "integer", "minimum": 0 },
+          "transport": { "oneOf": [{ "type": "string", "enum": ["serial", "nc"] }, { "type": "null" }] },
+          "board_ips": { "oneOf": [{ "type": "array", "maxItems": 4, "items": { "type": "string" } }, { "type": "null" }] },
+          "sha256_source": { "oneOf": [{ "type": "string", "pattern": "^[0-9a-f]{64}$" }, { "type": "null" }] },
+          "sha256_local": { "oneOf": [{ "type": "string", "pattern": "^[0-9a-f]{64}$" }, { "type": "null" }] },
+          "file": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "download_url": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "error": { "oneOf": [{ "type": "string" }, { "type": "null" }] }
+        }
+      },
+      "Remote": {
+        "type": "object",
+        "required": ["index", "name", "protocol", "keys"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0, "maximum": 7 },
+          "name": { "type": "string" },
+          "protocol": { "type": "string", "enum": ["SPACE_ENC", "RC5"] },
+          "keys": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "RemoteList": {
+        "type": "object",
+        "required": ["remotes", "remote_count", "key_count"],
+        "properties": {
+          "remotes": { "type": "array", "maxItems": 8, "items": { "$ref": "#/components/schemas/Remote" } },
+          "remote_count": { "type": "integer", "minimum": 0, "maximum": 8 },
+          "key_count": { "type": "integer", "minimum": 0, "maximum": 256 }
+        }
+      },
+      "RemoteLoadResult": {
+        "type": "object",
+        "required": ["loaded", "remote_count", "key_count"],
+        "properties": {
+          "loaded": { "type": "boolean", "const": true },
+          "remote_count": { "type": "integer", "minimum": 1, "maximum": 8 },
+          "key_count": { "type": "integer", "minimum": 1, "maximum": 256 }
+        }
+      },
+      "ParseError": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Error" },
+          { "type": "object", "required": ["line"], "properties": { "line": { "type": "integer", "minimum": 1 } } }
+        ]
+      },
+      "IrSendRequest": {
+        "type": "object",
+        "required": ["remote", "key"],
+        "properties": {
+          "remote": { "oneOf": [{ "type": "integer", "minimum": 0, "maximum": 7 }, { "type": "string", "minLength": 1 }] },
+          "key": { "type": "string", "minLength": 1 },
+          "repeats": { "type": "integer", "minimum": 0, "maximum": 10, "default": 0 }
+        }
+      },
+      "IrSendResult": {
+        "type": "object",
+        "required": ["sent", "repeats"],
+        "properties": {
+          "sent": { "type": "boolean", "const": true },
+          "repeats": { "type": "integer", "minimum": 0, "maximum": 10 }
+        }
+      },
+      "IrEvent": {
+        "type": "object",
+        "required": ["sequence", "uptime_ms", "message"],
+        "properties": {
+          "sequence": { "type": "integer", "minimum": 1 },
+          "uptime_ms": { "type": "integer", "minimum": 0 },
+          "message": { "type": "string" }
+        }
+      },
+      "IrEventBatch": {
+        "type": "object",
+        "required": ["events", "oldest", "next"],
+        "properties": {
+          "events": { "type": "array", "maxItems": 32, "items": { "$ref": "#/components/schemas/IrEvent" } },
+          "oldest": { "type": "integer", "minimum": 1 },
+          "next": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "OtaPartition": {
+        "type": "object",
+        "required": ["label", "address", "size", "project", "version"],
+        "properties": {
+          "label": { "type": "string", "enum": ["ota_0", "ota_1"] },
+          "address": { "type": "integer", "minimum": 0 },
+          "size": { "type": "integer", "const": 3145728 },
+          "project": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "version": { "oneOf": [{ "type": "string" }, { "type": "null" }] }
+        }
+      },
+      "OtaStatus": {
+        "type": "object",
+        "required": ["running", "boot", "reboot_required", "running_state"],
+        "properties": {
+          "running": { "oneOf": [{ "$ref": "#/components/schemas/OtaPartition" }, { "type": "null" }] },
+          "boot": { "oneOf": [{ "$ref": "#/components/schemas/OtaPartition" }, { "type": "null" }] },
+          "reboot_required": { "type": "boolean" },
+          "running_state": { "type": "string", "enum": ["new", "pending_verify", "valid", "invalid", "aborted", "undefined", "unavailable", "unknown"] }
+        }
+      },
+      "OtaInstallResult": {
+        "type": "object",
+        "required": ["installed", "version", "partition", "reboot_required"],
+        "properties": {
+          "installed": { "type": "boolean", "const": true },
+          "version": { "type": "string" },
+          "partition": { "type": "string", "enum": ["ota_0", "ota_1"] },
+          "reboot_required": { "type": "boolean", "const": true }
+        }
+      },
+      "RestartResult": {
+        "type": "object",
+        "required": ["restarting"],
+        "properties": {
+          "saved": { "type": "boolean" },
+          "restarting": { "type": "boolean", "const": true }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>stb-buddy console</title>
+  <link rel="stylesheet" href="/static/xterm.css">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="bar">
+    <span id="link" class="pill off">connecting…</span>
+    <span class="name">stb-buddy</span>
+    <span id="version" class="muted">v…</span>
+    <div id="uart-control" class="uart-control">
+      <button id="uart" class="uart-summary" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="uart-form" title="Configure UART properties">UART1 · 115200</button>
+      <form id="uart-form" class="uart-popover" role="dialog" aria-labelledby="uart-title" hidden>
+        <h2 id="uart-title">UART properties</h2>
+        <label for="uart-baud"><span>Baud rate</span><input id="uart-baud" type="number" min="1200" max="3000000" step="1" required></label>
+        <label for="uart-data-bits"><span>Data bits</span><select id="uart-data-bits"><option>5</option><option>6</option><option>7</option><option selected>8</option></select></label>
+        <label for="uart-parity"><span>Parity</span><select id="uart-parity"><option value="none" selected>None</option><option value="even">Even</option><option value="odd">Odd</option></select></label>
+        <label for="uart-stop-bits"><span>Stop bits</span><select id="uart-stop-bits"><option value="1" selected>1</option><option value="1.5">1.5</option><option value="2">2</option></select></label>
+        <p id="uart-config-status" class="uart-config-status">Changes last until reboot.</p>
+        <div class="uart-actions">
+          <button id="uart-cancel" type="button">Cancel</button>
+          <button id="uart-apply" type="submit" class="primary">Apply</button>
+        </div>
+      </form>
+    </div>
+    <span id="wifi" class="device"></span>
+    <span class="spacer"></span>
+    <span id="message" class="message" role="status"></span>
+    <div id="ir-control" class="ir-control">
+      <button id="ir" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="ir-panel">IR</button>
+      <section id="ir-panel" class="ir-popover" role="dialog" aria-labelledby="ir-title" hidden>
+        <div class="ir-heading">
+          <h2 id="ir-title">IR remote</h2>
+          <button id="ir-close" type="button" aria-label="Close IR panel">Close</button>
+        </div>
+        <div class="ir-toolbar">
+          <label for="ir-remote"><span>Remote</span><select id="ir-remote"></select></label>
+          <input id="ir-config-file" type="file" accept=".conf,text/plain" hidden>
+          <button id="ir-upload" type="button">Upload lircd.conf…</button>
+          <button id="ir-download" type="button">Download lircd.conf</button>
+        </div>
+        <p id="ir-status" class="ir-status" role="status" aria-live="polite"></p>
+        <div id="ir-keys" class="ir-keys" aria-label="Remote keys"></div>
+      </section>
+    </div>
+    <button id="clear-history" type="button">Clear History</button>
+    <button id="download-file" type="button" title="Copy a file from the STB and save it on this computer">Download file…</button>
+    <a class="button" href="/api/log" download="stb-buddy-uart.log">Download log</a>
+    <input id="ota-file" type="file" accept=".bin,application/octet-stream" hidden>
+    <button id="ota-select" type="button">OTA update</button>
+    <button id="ota-restart" type="button" hidden>Restart</button>
+    <div id="help-control" class="help-control">
+      <button id="help" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="help-panel">Help</button>
+      <section id="help-panel" class="help-popover" role="dialog" aria-labelledby="help-title" hidden>
+        <div class="help-heading">
+          <h2 id="help-title">stb-buddy help</h2>
+          <button id="help-close" type="button" aria-label="Close Help panel">Close</button>
+        </div>
+        <div class="help-content">
+          <section>
+            <h3>Connect the UART</h3>
+            <p>Use 3.3 V TTL: AtomS3R <code>GND ↔ STB GND</code>, <code>G2 TXD → STB RXD</code>, and <code>G1 RXD ← STB TXD</code>. Leave 5 V disconnected while USB powers the AtomS3R.</p>
+          </section>
+          <section>
+            <h3>Console and port</h3>
+            <p>Click the terminal and type normally. The default is 115200 8N1. Select <code>UART1 · baud</code> to change the live format; reboot restores defaults. MCP and HTTP API writes appear as magenta annotations. <strong>Clear History</strong> permanently removes all retained bytes and UART-write annotations.</p>
+          </section>
+          <section>
+            <h3>Files and IR</h3>
+            <p><strong>Download file…</strong> requires an STB Linux shell prompt and copies up to 2 MiB with SHA-256 verification. <strong>IR</strong> loads or saves <code>lircd.conf</code> and sends named keys; successful sends appear in magenta.</p>
+          </section>
+          <section>
+            <h3>Wi-Fi and OTA</h3>
+            <p>Hold the AtomS3R button for two seconds to start the open <code>Buddy-&lt;MAC&gt;</code> setup AP at <code>192.168.4.1</code>. OTA accepts only <code>stb_buddy.bin</code>; verify the version, then restart separately.</p>
+          </section>
+          <p class="help-warning"><strong>Trusted network only.</strong> UART, IR, Wi-Fi and OTA APIs have no authentication, and OTA images are integrity-checked but not signed.</p>
+        </div>
+        <div class="help-actions">
+          <a class="button primary-link" href="/docs" target="_blank" rel="noopener">Open API documentation</a>
+          <a class="button" href="/openapi.json" download="stb-buddy-openapi.json">OpenAPI JSON</a>
+        </div>
+      </section>
+    </div>
+  </header>
+  <main id="terminal"></main>
+  <dialog id="dl-dialog" aria-labelledby="dl-title">
+    <form id="dl-form">
+      <h2 id="dl-title">Download file from the STB</h2>
+      <label for="dl-path">Full path on the STB</label>
+      <input id="dl-path" type="text" placeholder="/etc/hosts" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+      <p class="hint">The STB must be at a Linux shell prompt. Files up to 2 MiB are verified with SHA-256 before saving.</p>
+      <div id="dl-status" class="dl-status" role="status" aria-live="polite"></div>
+      <div class="dl-actions">
+        <button id="dl-cancel" type="button">Cancel</button>
+        <button id="dl-start" type="submit" class="primary">Download</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="/static/xterm.js"></script>
+  <script src="/static/addon-fit.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
