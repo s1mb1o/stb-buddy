@@ -23,4 +23,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Build ESP32-S3 firmware
-        run: idf.py set-target esp32s3 build
+        run: /opt/esp/entrypoint.sh idf.py set-target esp32s3 build
