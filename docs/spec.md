@@ -129,7 +129,7 @@ setup AP is not active.
 ## Browser console
 
 In station mode `GET /` serves an embedded, dependency-free-from-the-network
-web console patterned after `tools/serial-hub`: a compact status bar, an
+web console patterned after `tools/stb-buddy-desktop`: a compact status bar, an
 xterm.js terminal, system light/dark theme tracking, UART keyboard input,
 Clear History, Download File, Download Log and OTA Update. The status bar
 shows the running firmware version. All assets, including xterm.js, are served
@@ -235,7 +235,7 @@ read-only: it does not provide a “try it” control for destructive operations
 ## Download files from the STB
 
 **Download file…** copies one readable file from the STB shell to the browser,
-following the `tools/serial-hub` workflow. It does not install software or
+following the `tools/stb-buddy-desktop` workflow. It does not install software or
 modify the source file. The STB must already be at a Linux shell prompt.
 
 1. Send `echo READY_$((40+2))` and require an exact `READY_42` line within five
@@ -269,7 +269,7 @@ previous cached file. A failed transfer retains no partial file.
 - `GET /api/downloads/<name>` streams the verified cached bytes with an
   attachment filename. It never returns an active, failed or previous job.
 
-The WebUI dialog matches serial-hub: path field, busy timer, result metadata,
+The WebUI dialog matches STB Buddy Desktop: path field, busy timer, result metadata,
 automatic browser save, **Close** after success, and errors that retain the
 path for retry. Esc and Cancel cannot stop an active transfer.
 
@@ -432,6 +432,6 @@ request flips a configured RC5 toggle bit; repeats preserve that state.
 - Linux PTY and `minicom` integration.
 - Unlimited or flash-backed UART history.
 - Large file and MTD downloads.
-- OpenAPI/Swagger compatibility with Python `serial-hub`.
+- OpenAPI/Swagger compatibility with Python `stb-buddy-desktop`.
 - IR learning.
 - Multiple physical UARTs.

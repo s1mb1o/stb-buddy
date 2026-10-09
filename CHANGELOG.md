@@ -72,7 +72,7 @@
 
 ## 0.9.0 — 2026-10-08
 
-- Added serial-hub-style **Download file…** shell validation, source and local
+- Added STB Buddy Desktop-style **Download file…** shell validation, source and local
   SHA-256 checks, 16 KiB verified serial chunks, `nc` acceleration/fallback,
   bounded retry handling and automatic browser saving.
 - Run browser downloads in a background task so port 80 and UART RX remain
@@ -136,7 +136,7 @@
   SSID/password form at `192.168.4.1:8765`.
 - Added the AtomS3R 128 x 128 status display with setup/connecting/online
   states, a horizontally scrolling SSID, IPv4 address, and long-press progress.
-- Added an embedded xterm.js web console patterned after `tools/serial-hub`,
+- Added an embedded xterm.js web console patterned after `tools/stb-buddy-desktop`,
   including bounded live history reads, serialized keyboard-to-UART writes,
   automatic light/dark theme, retained-log download, and complete history
   clearing.
