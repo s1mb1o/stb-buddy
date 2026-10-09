@@ -9,6 +9,11 @@ Connect the device to an STB through a 3.3 V UART.
 Use a browser, the REST API, or an MCP client to control the STB.
 No Linux host is necessary during operation.
 
+For the same browser, REST, and MCP approach on a Linux host connected through
+a USB UART adapter, see
+[**STB Buddy Desktop**](https://github.com/s1mb1o/stb-buddy-desktop). The
+desktop version adds persistent logs, larger downloads, and a local PTY.
+
 The firmware provides these functions:
 
 - A live browser terminal with keyboard input.
